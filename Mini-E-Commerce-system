@@ -1,0 +1,420 @@
+import csv
+import os
+
+PRODUCT_FILE = "products.txt"
+
+# Products are stored as dictionaries in a list.
+products = []
+
+# Cart stores product IDs and quantities.
+cart = {}
+
+
+def load_products():
+    """Load products from the file at program startup."""
+    global products
+    products = []
+
+    if not os.path.exists(PRODUCT_FILE):
+        return
+
+    with open(PRODUCT_FILE, "r", newline="", encoding="utf-8") as file:
+        reader = csv.reader(file)
+
+        for row in reader:
+            if len(row) != 4:
+                continue
+
+            try:
+                product_id, name, price, stock = row
+                products.append({
+                    "id": product_id,
+                    "name": name,
+                    "price": float(price),
+                    "stock": int(stock)
+                })
+            except ValueError:
+                continue
+
+
+def save_products():
+    """Save all products to the file after every change."""
+    with open(PRODUCT_FILE, "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+
+        for product in products:
+            writer.writerow([
+                product["id"],
+                product["name"],
+                product["price"],
+                product["stock"]
+            ])
+
+
+def format_number(number):
+    """Display whole numbers without unnecessary decimal places."""
+    if number == int(number):
+        return str(int(number))
+    return f"{number:.2f}".rstrip("0").rstrip(".")
+
+
+def get_product(product_id):
+    """Find a product by its ID."""
+    for product in products:
+        if product["id"].upper() == product_id.upper():
+            return product
+    return None
+
+
+def generate_product_id():
+    """Generate the next product ID, beginning with P101."""
+    highest_id = 100
+
+    for product in products:
+        product_id = product["id"].upper()
+
+        if product_id.startswith("P"):
+            try:
+                number = int(product_id[1:])
+                highest_id = max(highest_id, number)
+            except ValueError:
+                pass
+
+    return f"P{highest_id + 1}"
+
+
+def add_product(name=None, price=None, stock=None):
+    """Add a product after validating its details."""
+    if name is None:
+        name = input("Enter product name: ").strip()
+
+    if not name:
+        print("Invalid product name.")
+        return
+
+    if price is None:
+        try:
+            price = float(input("Enter product price: "))
+        except ValueError:
+            print("Invalid price. Price must be a positive number.")
+            return
+
+    try:
+        price = float(price)
+    except (ValueError, TypeError):
+        print("Invalid price. Price must be a positive number.")
+        return
+
+    if price <= 0:
+        print("Invalid price. Price must be a positive number.")
+        return
+
+    if stock is None:
+        try:
+            stock = int(input("Enter product stock: "))
+        except ValueError:
+            print("Invalid stock. Stock must be a non-negative integer.")
+            return
+
+    try:
+        stock = int(stock)
+    except (ValueError, TypeError):
+        print("Invalid stock. Stock must be a non-negative integer.")
+        return
+
+    if stock < 0:
+        print("Invalid stock. Stock must be a non-negative integer.")
+        return
+
+    product_id = generate_product_id()
+
+    product = {
+        "id": product_id,
+        "name": name,
+        "price": price,
+        "stock": stock
+    }
+
+    products.append(product)
+    save_products()
+
+    print(
+        f"Product added. ID: {product_id} | {name} | "
+        f"Price: {format_number(price)} | Stock: {stock}"
+    )
+
+    if stock == 0:
+        print(f"Warning: {name} is out of stock.")
+
+
+def update_product():
+    """Update an existing product."""
+    product_id = input("Enter product ID to update: ").strip()
+    product = get_product(product_id)
+
+    if product is None:
+        print(f"Product {product_id} not found.")
+        return
+
+    name = input(
+        f"Enter new name [{product['name']}]: "
+    ).strip()
+
+    if name:
+        product["name"] = name
+
+    price_input = input(
+        f"Enter new price [{format_number(product['price'])}]: "
+    ).strip()
+
+    if price_input:
+        try:
+            new_price = float(price_input)
+
+            if new_price <= 0:
+                print("Invalid price. Price must be a positive number.")
+                return
+
+            product["price"] = new_price
+        except ValueError:
+            print("Invalid price. Price must be a positive number.")
+            return
+
+    stock_input = input(
+        f"Enter new stock [{product['stock']}]: "
+    ).strip()
+
+    if stock_input:
+        try:
+            new_stock = int(stock_input)
+
+            if new_stock < 0:
+                print("Invalid stock. Stock must be non-negative.")
+                return
+
+            product["stock"] = new_stock
+        except ValueError:
+            print("Invalid stock. Stock must be a non-negative integer.")
+            return
+
+    save_products()
+    print(f"Product {product['id']} updated successfully.")
+
+
+def view_products():
+    """Display all available products."""
+    if not products:
+        print("No products available.")
+        return
+
+    print("\n--- Product List ---")
+    print(f"{'ID':<8}{'Name':<20}{'Price':>12}{'Stock':>10}")
+    print("-" * 50)
+
+    for product in products:
+        print(
+            f"{product['id']:<8}"
+            f"{product['name']:<20}"
+            f"{format_number(product['price']):>12}"
+            f"{product['stock']:>10}"
+        )
+
+
+def delete_product(product_id=None):
+    """Delete a product by ID."""
+    if product_id is None:
+        product_id = input("Enter product ID to delete: ").strip()
+
+    product = get_product(product_id)
+
+    if product is None:
+        print(f"Product {product_id} not found.")
+        return
+
+    name = product["name"]
+
+    products.remove(product)
+    cart.pop(product["id"], None)
+
+    save_products()
+
+    print(
+        f"Product '{name}' deleted. Products left: {len(products)}"
+    )
+
+
+def add_to_cart(product_id=None, quantity=None):
+    """Add a product and quantity to the shopping cart."""
+    if product_id is None:
+        product_id = input("Enter product ID: ").strip()
+
+    product = get_product(product_id)
+
+    if product is None:
+        print(f"Product {product_id} not found.")
+        return
+
+    if quantity is None:
+        try:
+            quantity = int(input("Enter quantity: "))
+        except ValueError:
+            print("Invalid quantity. Quantity must be a positive integer.")
+            return
+
+    try:
+        quantity = int(quantity)
+    except (ValueError, TypeError):
+        print("Invalid quantity. Quantity must be a positive integer.")
+        return
+
+    if quantity <= 0:
+        print("Invalid quantity. Quantity must be a positive integer.")
+        return
+
+    current_quantity = cart.get(product["id"], 0)
+    requested_quantity = current_quantity + quantity
+
+    if requested_quantity > product["stock"]:
+        print(
+            f"Insufficient stock for {product['name']}. "
+            f"Available stock: {product['stock']}"
+        )
+        return
+
+    cart[product["id"]] = requested_quantity
+
+    amount = product["price"] * quantity
+
+    print(
+        f"{product['name']} x{quantity} added | "
+        f"Amount: {format_number(amount)}"
+    )
+
+
+def view_cart():
+    """Display the shopping cart and its total."""
+    if not cart:
+        print("Cart is empty.")
+        return
+
+    total = 0
+
+    print("\n--- Shopping Cart ---")
+
+    for product_id, quantity in cart.items():
+        product = get_product(product_id)
+
+        if product is None:
+            continue
+
+        amount = product["price"] * quantity
+        total += amount
+
+        print(
+            f"{product['name']} x{quantity} | "
+            f"Amount: {format_number(amount)}"
+        )
+
+    print(f"Cart total: {format_number(total)}")
+
+
+def checkout():
+    """Validate the cart, reduce stock, and complete the order."""
+    if not cart:
+        print("Cart is empty.")
+        return
+
+    # Validate all items before changing any stock.
+    order_items = []
+
+    for product_id, quantity in cart.items():
+        product = get_product(product_id)
+
+        if product is None:
+            print(f"Product {product_id} not found.")
+            return
+
+        if quantity > product["stock"]:
+            print(
+                f"Insufficient stock for {product['name']}. "
+                f"Available stock: {product['stock']}"
+            )
+            return
+
+        order_items.append((product, quantity))
+
+    total = 0
+
+    for product, quantity in order_items:
+        amount = product["price"] * quantity
+        total += amount
+        product["stock"] -= quantity
+
+    save_products()
+
+    print(f"Order total: {format_number(total)}")
+
+    for product, quantity in order_items:
+        print(
+            f"{product['name']} stock left: {product['stock']}"
+        )
+
+    cart.clear()
+    print("Checkout successful.")
+
+
+def show_menu():
+    """Display the main menu."""
+    print("\n========== MINI E-COMMERCE SYSTEM ==========")
+    print("1. Add product")
+    print("2. Update product")
+    print("3. Delete product")
+    print("4. View products")
+    print("5. Add to cart")
+    print("6. View cart")
+    print("7. Checkout")
+    print("8. Exit")
+    print("============================================")
+
+
+def main():
+    """Main application loop."""
+    load_products()
+
+    while True:
+        show_menu()
+        choice = input("Enter your choice: ").strip()
+
+        if choice == "1":
+            add_product()
+
+        elif choice == "2":
+            update_product()
+
+        elif choice == "3":
+            delete_product()
+
+        elif choice == "4":
+            view_products()
+
+        elif choice == "5":
+            add_to_cart()
+
+        elif choice == "6":
+            view_cart()
+
+        elif choice == "7":
+            checkout()
+
+        elif choice == "8":
+            save_products()
+            print("Thank you for using Mini E-Commerce System.")
+            break
+
+        else:
+            print("Invalid choice. Please select 1 to 8.")
+
+
+if __name__ == "__main__":
+    main()
+
